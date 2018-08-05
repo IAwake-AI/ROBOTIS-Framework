@@ -30,7 +30,7 @@ using namespace robotis_framework;
 
 RobotisController::RobotisController()
   : is_timer_running_(false),
-    is_offset_enabled_(true),
+    is_offset_enabled_(false),
     stop_timer_(false),
     init_pose_loaded_(false),
     timer_thread_(0),
@@ -38,7 +38,7 @@ RobotisController::RobotisController()
     DEBUG_PRINT(false),
     robot_(0),
     gazebo_mode_(false),
-    gazebo_robot_name_("robotis")
+    gazebo_robot_name_("robotis_op3")
 {
   direct_sync_write_.clear();
 }
@@ -202,6 +202,8 @@ bool RobotisController::initialize(const std::string robot_file_path, const std:
 {
   std::string dev_desc_dir_path = ros::package::getPath("robotis_device") + "/devices";
 
+  ROS_INFO("Initializing Robot Hardware and Communications");
+
   // load robot info : port , device
   robot_ = new Robot(robot_file_path, dev_desc_dir_path);
 
@@ -323,6 +325,8 @@ bool RobotisController::initialize(const std::string robot_file_path, const std:
   }
 
   // (for loop) check all dxls are connected.
+  ROS_INFO("\nPing each motor to check if connected...");
+  int dxl_count = 0;
   for (auto& it : robot_->dxls_)
   {
     std::string joint_name  = it.first;
@@ -332,9 +336,16 @@ bool RobotisController::initialize(const std::string robot_file_path, const std:
     {
       usleep(10 * 1000);
       if (ping(joint_name) != 0)
+      {
         ROS_ERROR("JOINT[%s] does NOT respond!!", joint_name.c_str());
+        dxl_count++;
+      }
     }
   }
+  if(dxl_count > 50)
+    exit(-1);
+
+  ROS_INFO("Success, all motors connected, moving on...");
 
   initializeDevice(init_file_path);
 
@@ -351,6 +362,7 @@ void RobotisController::initializeDevice(const std::string init_file_path)
   YAML::Node doc;
   try
   {
+    //ROS_WARN("Opening File for Config [%s]", init_file_path.c_str());
     doc = YAML::LoadFile(init_file_path.c_str());
 
     for (YAML::const_iterator it_doc = doc.begin(); it_doc != doc.end(); it_doc++)
@@ -368,11 +380,9 @@ void RobotisController::initializeDevice(const std::string init_file_path)
 
       if (dxl == NULL)
       {
-        ROS_WARN("Joint [%s] was not found.", joint_name.c_str());
+        ROS_WARN("Joint [%s] was expected by dxl_init info.", joint_name.c_str());
         continue;
       }
-      if (DEBUG_PRINT)
-        ROS_INFO("JOINT_NAME: %s", joint_name.c_str());
 
       for (YAML::const_iterator it_joint = joint_node.begin(); it_joint != joint_node.end(); it_joint++)
       {
@@ -383,11 +393,13 @@ void RobotisController::initializeDevice(const std::string init_file_path)
 
         uint32_t value = it_joint->second.as<uint32_t>();
 
+        ROS_DEBUG("JOINT_NAME: %s ITEM_NAME: %s VALUE: %d", joint_name.c_str(), item_name.c_str(), value);
+
         ControlTableItem *item = dxl->ctrl_table_[item_name];
         if (item == NULL)
         {
-          ROS_WARN("Control Item [%s] was not found.", item_name.c_str());
-          continue;
+          ROS_DEBUG("Control Item [%s] was not found in SDK for [%s].", item_name.c_str(), joint_name.c_str());
+          //continue;
         }
 
         if (item->memory_type_ == EEPROM)
@@ -462,6 +474,8 @@ void RobotisController::initializeDevice(const std::string init_file_path)
     int bulkread_start_addr = 0;
     int bulkread_data_length = 0;
 
+    ROS_INFO("Reading control table data for: %s", joint_name.c_str());
+
 //    // bulk read default : present position
 //    if(dxl->present_position_item != 0)
 //    {
@@ -489,7 +503,7 @@ void RobotisController::initializeDevice(const std::string init_file_path)
           bulkread_data_length += addr_leng;
           for (int l = 0; l < addr_leng; l++)
           {
-            // ROS_WARN("[%12s] INDIR_ADDR: %d, ITEM_ADDR: %d", joint_name.c_str(), indirect_addr, dxl->ctrl_table[dxl->bulk_read_items[i]->item_name]->address + _l);
+            //ROS_WARN("[%12s] INDIR_ADDR: %d, ITEM_ADDR: %d", joint_name.c_str(), indirect_addr, dxl->ctrl_table_[dxl->bulk_read_items_[i]->item_name_]->address_ + l);
 
             read2Byte(joint_name, indirect_addr, &data16);
             if (data16 != dxl->ctrl_table_[dxl->bulk_read_items_[i]->item_name_]->address_ + l)
@@ -523,7 +537,7 @@ void RobotisController::initializeDevice(const std::string init_file_path)
       }
     }
 
-//    ROS_WARN("[%12s] start_addr: %d, data_length: %d", joint_name.c_str(), bulkread_start_addr, bulkread_data_length);
+    //ROS_WARN("[%12s] start_addr: %d, data_length: %d", joint_name.c_str(), bulkread_start_addr, bulkread_data_length);
     if (bulkread_start_addr != 0)
       port_to_bulk_read_[dxl->port_name_]->addParam(dxl->id_, bulkread_start_addr, bulkread_data_length);
 
@@ -563,7 +577,7 @@ void RobotisController::initializeDevice(const std::string init_file_path)
           bulkread_data_length += addr_leng;
           for (int l = 0; l < addr_leng; l++)
           {
-//            ROS_WARN("[%12s] INDIR_ADDR: %d, ITEM_ADDR: %d", sensor_name.c_str(), indirect_addr, sensor->ctrl_table[sensor->bulk_read_items[i]->item_name]->address + _l);
+            ROS_WARN("[%12s] INDIR_ADDR: %d, ITEM_ADDR: %d", sensor_name.c_str(), indirect_addr, sensor->ctrl_table_[sensor->bulk_read_items_[i]->item_name_]->address_ + l);
             read2Byte(sensor_name, indirect_addr, &data16);
             if (data16 != sensor->ctrl_table_[sensor->bulk_read_items_[i]->item_name_]->address_ + l)
             {
@@ -598,7 +612,7 @@ void RobotisController::initializeDevice(const std::string init_file_path)
       }
     }
 
-    //ROS_WARN("[%12s] start_addr: %d, data_length: %d", sensor_name.c_str(), bulkread_start_addr, bulkread_data_length);
+    ROS_WARN("[%12s] start_addr: %d, data_length: %d", sensor_name.c_str(), bulkread_start_addr, bulkread_data_length);
     if (bulkread_start_addr != 0)
       port_to_bulk_read_[sensor->port_name_]->addParam(sensor->id_, bulkread_start_addr, bulkread_data_length);
   }
@@ -684,7 +698,7 @@ void *RobotisController::timerThread(void *param)
   static struct timespec next_time;
   static struct timespec curr_time;
 
-  ROS_DEBUG("controller::thread_proc started");
+  ROS_INFO("controller::thread_proc started");
 
   clock_gettime(CLOCK_MONOTONIC, &next_time);
 
@@ -743,6 +757,7 @@ void RobotisController::startTimer()
 
     pthread_attr_init(&attr);
 
+    /** TODO IAwake: Don't make this real-time
     error = pthread_attr_setschedpolicy(&attr, SCHED_RR);
     if (error != 0)
       ROS_ERROR("pthread_attr_setschedpolicy error = %d\n", error);
@@ -750,16 +765,21 @@ void RobotisController::startTimer()
     if (error != 0)
       ROS_ERROR("pthread_attr_setinheritsched error = %d\n", error);
 
+ 
     memset(&param, 0, sizeof(param));
     param.sched_priority = 31;    // RT
     error = pthread_attr_setschedparam(&attr, &param);
     if (error != 0)
       ROS_ERROR("pthread_attr_setschedparam error = %d\n", error);
+    */
+
+    ROS_INFO("Ready to create the RobotisController Thread!");
 
     // create and start the thread
-    if ((error = pthread_create(&this->timer_thread_, &attr, this->timerThread, this)) != 0)
+    error = pthread_create(&this->timer_thread_, &attr, this->timerThread, this);
+    if (error != 0)
     {
-      ROS_ERROR("Creating timer thread failed!!");
+      ROS_ERROR("Creating timer thread failed, [%d]", error);
       exit(-1);
     }
   }
@@ -866,7 +886,6 @@ void RobotisController::loadOffset(const std::string path)
   if (offset_node.size() == 0)
     return;
 
-  ROS_INFO("Load offsets...");
   for (YAML::const_iterator it = offset_node.begin(); it != offset_node.end(); it++)
   {
     std::string joint_name = it->first.as<std::string>();
@@ -876,6 +895,7 @@ void RobotisController::loadOffset(const std::string path)
     if (dxl_it != robot_->dxls_.end())
       dxl_it->second->dxl_state_->position_offset_ = offset;
   }
+  ROS_INFO("Loading offsets complete.");
 }
 
 void RobotisController::process()
