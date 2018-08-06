@@ -698,7 +698,7 @@ void *RobotisController::timerThread(void *param)
   static struct timespec next_time;
   static struct timespec curr_time;
 
-  ROS_INFO("controller::thread_proc started");
+  //ROS_INFO("controller::thread_proc started");
 
   clock_gettime(CLOCK_MONOTONIC, &next_time);
 
@@ -773,7 +773,7 @@ void RobotisController::startTimer()
       ROS_ERROR("pthread_attr_setschedparam error = %d\n", error);
     */
 
-    ROS_INFO("Ready to create the RobotisController Thread!");
+    //ROS_INFO("Ready to create the RobotisController Thread!");
 
     // create and start the thread
     error = pthread_create(&this->timer_thread_, &attr, this->timerThread, this);
@@ -783,6 +783,8 @@ void RobotisController::startTimer()
       exit(-1);
     }
   }
+
+  ROS_INFO("New Timer Thread started");
 
   this->is_timer_running_ = true;
 }
@@ -1218,12 +1220,14 @@ void RobotisController::process()
 
       queue_mutex_.lock();
 
-//      for (auto& it : port_to_sync_write_position_)
-//      {
-//        it.second->txPacket();
-//        it.second->clearParam();
-//      }
 
+    /** TODO IAwake, should this be commended out?
+     for (auto& it : port_to_sync_write_position_)
+           {
+        it.second->txPacket();
+        it.second->clearParam();
+      }
+    */
       if (direct_sync_write_.size() > 0)
       {
         for (int i = 0; i < direct_sync_write_.size(); i++)
