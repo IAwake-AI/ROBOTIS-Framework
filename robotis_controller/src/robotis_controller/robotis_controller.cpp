@@ -342,8 +342,11 @@ bool RobotisController::initialize(const std::string robot_file_path, const std:
       }
     }
   }
-  if(dxl_count > 50)
+  if(dxl_count > 1)
+  {
+    ROS_ERROR("Too many joint failures, exiting");
     exit(-1);
+  }
 
   ROS_INFO("Success, all motors connected, moving on...");
 
