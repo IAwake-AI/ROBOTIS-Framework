@@ -365,7 +365,10 @@ void RobotisController::initializeDevice(const std::string init_file_path)
   YAML::Node doc;
   try
   {
-    //ROS_WARN("Opening File for Config [%s]", init_file_path.c_str());
+    
+
+
+    ROS_WARN("Opening File for Config [%s]", init_file_path.c_str());
     doc = YAML::LoadFile(init_file_path.c_str());
 
     for (YAML::const_iterator it_doc = doc.begin(); it_doc != doc.end(); it_doc++)
@@ -401,9 +404,10 @@ void RobotisController::initializeDevice(const std::string init_file_path)
         ControlTableItem *item = dxl->ctrl_table_[item_name];
         if (item == NULL)
         {
-          ROS_DEBUG("Control Item [%s] was not found in SDK for [%s].", item_name.c_str(), joint_name.c_str());
+          ROS_INFO("Control Item [%s] was not found in SDK for [%s].", item_name.c_str(), joint_name.c_str());
           //continue;
         }
+
 
         if (item->memory_type_ == EEPROM)
         {
@@ -457,7 +461,7 @@ void RobotisController::initializeDevice(const std::string init_file_path)
     }
   } catch (const std::exception& e)
   {
-    ROS_INFO("Dynamixel Init file not found.");
+    ROS_INFO("Dynamixel Init file not found. %s", init_file_path.c_str());
   }
 
   // [ BulkRead ] StartAddress : Present Position , Length : 10 ( Position/Velocity/Current )
